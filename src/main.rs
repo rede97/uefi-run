@@ -60,15 +60,70 @@ fn main() {
     }
 
     let mut qemu_config = QemuConfig {
-        qemu_path: args.qemu_path,
-        bios_path: args.bios_path,
+        qemu_path: args.qemu_path.clone(),
+        bios_path: args.bios_path.clone(),
+        pflash: None,
         drives: vec![QemuDriveConfig {
             file: image_file_path.to_str().unwrap().to_string(),
             media: "disk".to_string(),
             format: "raw".to_string(),
         }],
+        print_cmd: args.print_cmd,
         ..Default::default()
     };
+
+    if args.pflash {
+        let code_path = args
+            .ovmf_code
+            .as_deref()
+            .unwrap_or(DEFAULT_OVMF_CODE_PATH);
+        let vars_template_path = args
+            .ovmf_vars
+            .as_deref()
+            .unwrap_or(DEFAULT_OVMF_VARS_PATH);
+        let code_path_buf = PathBuf::from(code_path);
+        let vars_template_buf = PathBuf::from(vars_template_path);
+        if !code_path_buf.exists() {
+            eprintln!(
+                "uefi-run: OVMF code file not found: {} (use --ovmf-code to specify)",
+                code_path
+            );
+            std::process::exit(1);
+        }
+        if !vars_template_buf.exists() {
+            eprintln!(
+                "uefi-run: OVMF vars template not found: {} (use --ovmf-vars to specify)",
+                vars_template_path
+            );
+            std::process::exit(1);
+        }
+        let vars_dir = args.ovmf_vars_dir.clone().unwrap_or_else(|| {
+            std::env::current_dir().expect("cannot get current directory")
+        });
+        let vars_filename = vars_template_buf
+            .file_name()
+            .map(|n| n.to_os_string())
+            .unwrap_or_else(|| std::ffi::OsString::from("OVMF_VARS_4M.fd"));
+        let vars_target = vars_dir.join(&vars_filename);
+        if !vars_target.exists() {
+            std::fs::create_dir_all(&vars_dir).expect("cannot create OVMF vars directory");
+            std::fs::copy(&vars_template_buf, &vars_target)
+                .expect("failed to copy OVMF vars template");
+        }
+        qemu_config.pflash = Some((
+            code_path_buf
+                .canonicalize()
+                .unwrap_or(code_path_buf)
+                .to_string_lossy()
+                .into_owned(),
+            vars_target
+                .canonicalize()
+                .unwrap_or(vars_target)
+                .to_string_lossy()
+                .into_owned(),
+        ));
+    }
+
     qemu_config
         .additional_args
         .extend(args.qemu_args.iter().cloned());

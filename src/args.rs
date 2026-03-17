@@ -2,6 +2,10 @@ use super::*;
 use clap::Parser;
 use std::path::PathBuf;
 
+/// Default paths for system OVMF (pflash mode)
+pub const DEFAULT_OVMF_CODE_PATH: &str = "/usr/share/OVMF/OVMF_CODE_4M.fd";
+pub const DEFAULT_OVMF_VARS_PATH: &str = "/usr/share/OVMF/OVMF_VARS_4M.fd";
+
 /// Command line arguments for uefi-run
 #[derive(Parser, Debug, Default, PartialEq)]
 #[clap(
@@ -12,9 +16,21 @@ use std::path::PathBuf;
     dont_delimit_trailing_values = true
 )]
 pub struct Args {
-    /// Bios image
+    /// Bios image (ignored when --pflash is used)
     #[clap(long, short = 'b', default_value = "OVMF.fd")]
     pub bios_path: String,
+    /// Use pflash mode with OVMF_CODE and OVMF_VARS (auto-detect under /usr/share/OVMF/ if paths not given)
+    #[clap(long)]
+    pub pflash: bool,
+    /// OVMF code file (for pflash mode; default: /usr/share/OVMF/OVMF_CODE_4M.fd)
+    #[clap(long, requires = "pflash")]
+    pub ovmf_code: Option<String>,
+    /// OVMF vars template file (for pflash mode; copied to vars dir if not present; default: /usr/share/OVMF/OVMF_VARS_4M.fd)
+    #[clap(long, requires = "pflash")]
+    pub ovmf_vars: Option<String>,
+    /// Directory to copy OVMF vars into (for pflash mode; default: current directory). If vars file already exists here, it is not overwritten.
+    #[clap(long, requires = "pflash")]
+    pub ovmf_vars_dir: Option<PathBuf>,
     /// Path to qemu executable
     #[clap(long, short = 'q', default_value = "qemu-system-x86_64")]
     pub qemu_path: String,
@@ -36,6 +52,9 @@ pub struct Args {
     /// This effectively skips the 5 second startup delay.
     #[clap(long, short = 'd')]
     pub boot: bool,
+    /// Print the full QEMU command before running
+    #[clap(long)]
+    pub print_cmd: bool,
 }
 
 impl Args {
